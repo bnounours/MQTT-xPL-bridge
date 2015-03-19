@@ -23,6 +23,7 @@ import os
 import sys
 from socket import socket,AF_INET, SOCK_DGRAM,SOL_SOCKET,SO_BROADCAST
 from socket import error as SocketError
+import logging
 
 from threading import Thread,Event
 import select
@@ -76,6 +77,7 @@ def parse_xpl_entities(xplstring):
 
     # length sanity check
     if(len(command) == 0 or len(schema) == 0 or len(header) == 0 or len(body) == 0):
+        logging.warning('parse_xpl_entities: length sanity check failed')
         raise ValueError
 
     # Test for properly formed schema
@@ -83,12 +85,14 @@ def parse_xpl_entities(xplstring):
 
     # Test for properly formed command
     if(command != 'xpl-cmnd' and command != 'xpl-stat' and command != 'xpl-trig'):
+        logging.warning('parse_xpl_entities: bad command')
         raise ValueError
 
     # Test for required entities in header
     if 'source' not in header_dict\
         or 'target' not in header_dict\
         or 'hop' not in header_dict:
+        logging.warning('parse_xpl_entities: entities missing from header')
         raise ValueError
 
     # Put it all together
@@ -113,6 +117,7 @@ def taskHeartBeat():
     while True:
         #print("Sending Heartbeat message")
         sock.sendto(xplhbmsg,("255.255.255.255", xpl_port))
+        logging.debug("xPL heartbeat message sent")
         time.sleep(hbsleep) # Wait till it's time to send another heartbeat
 
 # MQTT Connected callback
@@ -122,6 +127,7 @@ def on_connect(client, userdata, flags, rc):
         items = dict(Config.items(entry))
         client.subscribe(items['mqtt_sub'], qos=0)
     connected_ev.set()
+    logging.info("MQTT connected")
 
 #
 # MQTT Message received callback
@@ -164,13 +170,13 @@ def on_message(client, userdata, msg):
                      k,v = kv.split(':')
                      xpl_out_string += k+'='+v+'\n'
             except ValueError:
-                # print("Format error in mqtt message") # DEBUG
+                logging.warning('on_message: format error in mqtt message')
                 return
             # Close body
             xpl_out_string += '}' + '\n'
 
 
-            #print(xpl_out_string) # DEBUG
+            logging.debug("Sending xPL message: {}".format(xpl_out_string))
 
 
             # Send the message to the xPL network
@@ -197,7 +203,7 @@ def xplmqttbridge():
         boundport = 50000
         while True:
             try :
-                #print("Boundport: {}".format(boundport))
+                logging.info("Bound port: {}".format(boundport))
                 xpladdr = ("0.0.0.0", boundport)
                 xplsock.bind(xpladdr)
             except SocketError :
@@ -213,10 +219,8 @@ def xplmqttbridge():
     client.on_message = on_message
     client.connect(generalConfigDict['mqtt_broker'], int(generalConfigDict['mqtt_port']), mqtt_timeout)
     client.loop_start()
-    #print("Waiting to connect to MQTT broker...")
+    logging.info("MQTT Started")
     connected_ev.wait()
-    #print("Connected to MQTT broker")
-
 
     # Start heartbeat thread
     heartbeat_th = Thread(target=taskHeartBeat)
@@ -233,7 +237,7 @@ def xplmqttbridge():
             try:
                 xpl_entities = parse_xpl_entities(data)
             except ValueError:
-                #print("** bad xPL packet!") # DEBUG
+                logging.warning('xplmqttbridge: bad xPL packet')
                 continue
 
             #print(xpl_entities) # DEBUG
@@ -254,6 +258,7 @@ def xplmqttbridge():
                         continue
                 payload = str(xpl_entities['body']).replace(' ','').replace('{','').replace('}','').replace("'","")
                 # If topic is defined, send a payload to it
+                logging.debug("Sending MQTT topic: {} message: {}".format(items['mqtt_pub'], payload))
                 if 'mqtt_pub' in items:
                     client.publish(items['mqtt_pub'], payload)
 
@@ -266,6 +271,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='XPL to MQTT bridge', prog='xplmqttbridge')
     parser.add_argument('-n', action='store_true', default=False, help='Do not run in background mode')
     parser.add_argument('-c', action='store', help='Specify a configuration file')
+    parser.add_argument('-d', action='store', help='Specify a logging level (1-5)', default='2')
 
     args = parser.parse_args()
 
@@ -286,6 +292,19 @@ if __name__ == '__main__':
     # Get config options
     generalConfigDict = dict(Config.items("general"))
 
+    loglevel = int(args.d)
+
+    if(loglevel < 1):
+        loglevel = 1
+    elif(loglevel > 5):
+        loglevel = 5
+
+    logcode = (logging.CRITICAL, logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG)[loglevel - 1]
+
+    if 'logfile' in generalConfigDict and args.n is False:
+        logging.basicConfig(filename=generalConfigDict['logfile'], filemode='w', level=logcode)
+    else:
+        logging.basicConfig(level=logcode)
 
     xpl_port = int(generalConfigDict['xpl_port'])
     mqtt_port = int(generalConfigDict['mqtt_port'])
@@ -313,7 +332,7 @@ if __name__ == '__main__':
             # exit first parent
             sys.exit(0)
     except OSError, e:
-        print("fork #1 failed: {} ({})".format(e.errno, e.strerror), file=sys.stderr)
+        logging.error("fork #1 failed: {} ({})".format(e.errno, e.strerror), file=sys.stderr)
         sys.exit(1)
 
     # decouple from parent environment
@@ -326,10 +345,10 @@ if __name__ == '__main__':
         pid = os.fork()
         if pid > 0:
             # exit from second parent, print eventual PID before
-            print("Daemon PID: {}".format(pid))
+            logging.info("Daemon PID: {}".format(pid))
             sys.exit(0)
     except OSError, e:
-        print("fork #2 failed: {} ({})".format(e.errno, e.strerror), file=sys.stderr)
+        logging.error("fork #2 failed: {} ({})".format(e.errno, e.strerror), file=sys.stderr)
         sys.exit(1)
 
     xplmqttbridge()
