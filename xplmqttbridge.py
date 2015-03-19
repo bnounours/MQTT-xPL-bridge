@@ -21,6 +21,7 @@ from __future__ import print_function
 __author__ = 'srodgers'
 import os
 import sys
+import signal
 from socket import socket,AF_INET, SOCK_DGRAM,SOL_SOCKET,SO_BROADCAST
 from socket import error as SocketError
 import logging
@@ -44,6 +45,22 @@ boundport = 0
 xpl_port = 0
 xpl_remote_ip = ''
 mqtt_port = 0
+
+
+
+#
+# Process signal to exit
+#
+
+def signal_exit(signum, stack):
+    if('pidfile' in generalConfigDict and args.n is False):
+        try:
+            os.remove(generalConfigDict['pidfile'])
+        except (OSError, IOError) as e:
+            logging.error("Could not delete pidfile: {}".format(generalConfigDict['pidfile']))
+    logging.info("xplmqttbridge.py shutting down")
+    raise SystemExit
+
 
 #
 # Parse a string of xpl entities into a dictionary of dictionaries
@@ -229,7 +246,11 @@ def xplmqttbridge():
 
     # Wait on xPL data
     while True:
+
+
         readable, writeable, errored = select.select([xplsock],[],[],60)
+
+
         if len(readable) == 1 :
             data,addr = xplsock.recvfrom(maxxplmsg)
             #print('packet string:') # DEBUG
@@ -306,6 +327,8 @@ if __name__ == '__main__':
     else:
         logging.basicConfig(level=logcode)
 
+
+
     xpl_port = int(generalConfigDict['xpl_port'])
     mqtt_port = int(generalConfigDict['mqtt_port'])
     xpl_remote_ip = generalConfigDict['xpl_remote_ip']
@@ -321,11 +344,16 @@ if __name__ == '__main__':
         elif section.startswith('mqtt:'):
             mqtttoxpl.append(section)
 
+    signal.signal(signal.SIGINT, signal_exit)
+    signal.signal(signal.SIGTERM, signal_exit)
+
+
     if(args.n is True):
         xplmqttbridge()
 
     # do the UNIX double-fork magic, see Stevens' "Advanced
     # Programming in the UNIX Environment" for details (ISBN 0201563177)
+    pid = 0
     try:
         pid = os.fork()
         if pid > 0:
@@ -346,10 +374,20 @@ if __name__ == '__main__':
         if pid > 0:
             # exit from second parent, print eventual PID before
             logging.info("Daemon PID: {}".format(pid))
-            sys.exit(0)
+            if 'pidfile' in generalConfigDict:
+                try:
+                    with open(generalConfigDict['pidfile'],'w') as pidfile:
+                        pidfile.write('{}'.format(pid))
+                except (OSError, IOError):
+                    logging.error("Could not write pidfile: {}".format(generalConfigDict['pidfile']))
+                sys.exit(0)
+
     except OSError, e:
         logging.error("fork #2 failed: {} ({})".format(e.errno, e.strerror), file=sys.stderr)
         sys.exit(1)
+
+    # Ignore SIGHUP in daemon mode
+    signal.signal(signal.SIGHUP, signal.SIG_IGN)
 
     xplmqttbridge()
 
