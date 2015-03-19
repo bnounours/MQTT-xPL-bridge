@@ -21,7 +21,9 @@ from __future__ import print_function
 __author__ = 'srodgers'
 import os
 import sys
-from socket import *
+from socket import socket,AF_INET, SOCK_DGRAM,SOL_SOCKET,SO_BROADCAST
+from socket import error as SocketError
+
 from threading import Thread,Event
 import select
 import time
@@ -108,7 +110,7 @@ def taskHeartBeat():
     sock.setsockopt(SOL_SOCKET,SO_BROADCAST,1)
     xplhbmsg = "xpl-stat\n{\nhop=1\nsource=hwstar-xplmqttbridge.python\ntarget=*\n}\nhbeat.app\n{\ninterval=5\nport=" +\
                str(boundport) + "\nremote-ip=" + xpl_remote_ip +"\n}\n"
-    while 1:
+    while True:
         #print("Sending Heartbeat message")
         sock.sendto(xplhbmsg,("255.255.255.255", xpl_port))
         time.sleep(hbsleep) # Wait till it's time to send another heartbeat
@@ -190,7 +192,7 @@ def xplmqttbridge():
         boundport = xpl_port
         xpladdr = ("0.0.0.0", xpl_port)
         xplsock.bind(xpladdr)
-    except :
+    except SocketError:
         # A hub is running, so bind to a high port
         boundport = 50000
         while True:
@@ -198,7 +200,7 @@ def xplmqttbridge():
                 #print("Boundport: {}".format(boundport))
                 xpladdr = ("0.0.0.0", boundport)
                 xplsock.bind(xpladdr)
-            except :
+            except SocketError :
                 #print("Except")
                 boundport += 1
                 continue
