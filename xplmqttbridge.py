@@ -234,6 +234,8 @@ def xplmqttbridge():
     client = mqtt.Client()
     client.on_connect = on_connect
     client.on_message = on_message
+    if'mqtt_user' in generalConfigDict and 'mqtt_pass' in generalConfigDict:
+        client.username_pw_set(generalConfigDict['mqtt_user'], generalConfigDict['mqtt_pass'])
     client.connect(generalConfigDict['mqtt_broker'], int(generalConfigDict['mqtt_port']), mqtt_timeout)
     client.loop_start()
     logging.info("MQTT Started")
@@ -302,7 +304,7 @@ if __name__ == '__main__':
 
     # Read config file
     if args.c is None:
-        cfgfiles = ['./xplmqttbridge.conf', '/etc/xplmqttbridge/xplmqttbridge.conf']
+        cfgfiles = ['/etc/xplmqttbridge/xplmqttbridge.conf','./xplmqttbridge.conf']
     else:
         if os.path.isfile(args.c) is False:
             sys.exit("Config file missing: {}".format(args.c))
