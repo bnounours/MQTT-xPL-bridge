@@ -29,6 +29,7 @@ import logging
 from threading import Thread,Event
 import select
 import time
+import json
 import argparse
 import ConfigParser
 import paho.mqtt.client as mqtt
@@ -179,13 +180,13 @@ def on_message(client, userdata, msg):
             # Open body
             xpl_out_string += '{' + '\n'
 
+            logging.debug('msg.payload = {}'.format(msg.payload))
+
             try:
-                 kvpairs = message.split(',')
-                 # Fill body with kv pairs
-                 for kv in kvpairs:
-                     kv.index(':')
-                     k,v = kv.split(':')
-                     xpl_out_string += k+'='+v+'\n'
+                for k,v in json.loads(msg.payload).iteritems():
+                    k = k.encode('ascii')
+                    v = v.encode('ascii')
+                    xpl_out_string += k+'='+v+'\n'
             except ValueError:
                 logging.warning('on_message: format error in mqtt message')
                 return
@@ -279,13 +280,13 @@ def xplmqttbridge():
                 if 'xpl_schema' in items:
                     if items['xpl_schema'] != xpl_entities['schema']:
                         continue
-                payload = str(xpl_entities['body']).replace(' ','').replace('{','').replace('}','').replace("'","")
+
+                payload = json.dumps(xpl_entities['body'])
+
                 # If topic is defined, send a payload to it
                 logging.debug("Sending MQTT topic: {} message: {}".format(items['mqtt_pub'], payload))
                 if 'mqtt_pub' in items:
                     client.publish(items['mqtt_pub'], payload)
-
-
 
 #
 # Main code
