@@ -280,6 +280,9 @@ def xplmqttbridge():
                 if 'xpl_schema' in items:
                     if items['xpl_schema'] != xpl_entities['schema']:
                         continue
+                if 'xpl_body_device' in items:
+                    if items['xpl_body_device'] != xpl_entities['body']['device']:
+                        continue
 
                 payload = json.dumps(xpl_entities['body'])
 
