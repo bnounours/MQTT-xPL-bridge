@@ -287,9 +287,10 @@ def xplmqttbridge():
                 payload = json.dumps(xpl_entities['body'])
 
                 # If topic is defined, send a payload to it
-                logging.debug("Sending MQTT topic: {} message: {}".format(items['mqtt_pub'], payload))
+                mqtt_topic=items['mqtt_pub'].format(**xpl_entities['body'])
+                logging.debug("Sending MQTT topic: {} message: {}".format(mqtt_topic, payload))
                 if 'mqtt_pub' in items:
-                    client.publish(items['mqtt_pub'], payload)
+                    client.publish(mqtt_topic, payload)
 
 #
 # Main code
