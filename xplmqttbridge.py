@@ -294,7 +294,7 @@ def xplmqttbridge():
                     #In case the configuration is bad we don't replace the parameters
                     mqtt_topic=items['mqtt_pub']
 
-                logging.debug("Sending MQTT topic: {} message: {}".format(mqtt_topic, entry))
+                logging.debug("Sending MQTT topic: {} message: {}".format(mqtt_topic, payload))
                 if 'mqtt_pub' in items:
                     client.publish(mqtt_topic, payload)
 
