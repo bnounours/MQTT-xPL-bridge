@@ -287,8 +287,14 @@ def xplmqttbridge():
                 payload = json.dumps(xpl_entities['body'])
 
                 # If topic is defined, send a payload to it
-                mqtt_topic=items['mqtt_pub'].format(**xpl_entities['body'])
-                logging.debug("Sending MQTT topic: {} message: {}".format(mqtt_topic, payload))
+                try:
+                    mqtt_topic=items['mqtt_pub'].format(**xpl_entities['body'])
+                except KeyError as e:
+                    logging.warn("The parameter '{}' was not found in xpl message for mapping '{}'".format(e.args[0], entry))
+                    #In case the configuration is bad we don't replace the parameters
+                    mqtt_topic=items['mqtt_pub']
+
+                logging.debug("Sending MQTT topic: {} message: {}".format(mqtt_topic, entry))
                 if 'mqtt_pub' in items:
                     client.publish(mqtt_topic, payload)
 
